@@ -38,14 +38,14 @@ Intent rules:
 
 ### Installation
 
-git clone https://github.com/ajithgeorgekaviyil/MultiAgent.git
-cd MultiAgent
-python -m venv .venv
+- git clone https://github.com/ajithgeorgekaviyil/MultiAgent.git
+- cd MultiAgent
+- python -m venv .venv
 # macOS/Linux:
-source .venv/bin/activate         
+- source .venv/bin/activate         
 # Windows (PowerShell): 
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+- .\.venv\Scripts\Activate.ps1
+- ```pip install -r requirements.txt```
 
 ### Environment Variables
 
