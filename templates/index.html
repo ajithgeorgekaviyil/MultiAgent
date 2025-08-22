@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Multi Agent Chat</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#facc15; --danger:#ef4444; --success:#10b981; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial; background:var(--bg); color:var(--text); }
+    header { padding:16px 20px; border-bottom:1px solid #1f2937; display:flex; justify-content:space-between; align-items:center; }
+    header h1 { margin:0; font-size:16px; font-weight:600; letter-spacing:.3px; }
+    main { max-width:900px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+    #messages { background:var(--panel); border:1px solid #1f2937; border-radius:10px; padding:12px; }
+    .row { padding:10px 12px; border-radius:8px; margin:10px 0; white-space:pre-wrap; word-wrap:break-word; }
+    .row.user { background:#0b1220; border:1px solid #1e293b; }
+    .row.agent { background:#0c1614; border:1px solid #113a2d; }
+    .row.meta { background:#0f1020; border:1px dashed #334155; color:var(--muted); font-size:13px; }
+    .row.error { background:#200c0c; border:1px solid #3f1d1d; color:#fecaca; }
+    .agent-header { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-weight:600; font-size:14px; color:#a7f3d0; }
+    .agent-dot { width:8px; height:8px; border-radius:50%; background:#34d399; display:inline-block; }
+    .agent-name { opacity:.95; }
+    form { display:flex; gap:8px; align-items:stretch; }
+    textarea { flex:1; resize:vertical; min-height:58px; max-height:200px; padding:10px 12px; border-radius:10px; border:1px solid #1f2937; background:#0b1220; color:var(--text); }
+    .button-group { display:flex; gap:8px; height:100%; }
+    button { padding:10px 14px; border:0; border-radius:10px; background:var(--accent); color:#1f2937; font-weight:600; cursor:pointer; height:100%; }
+    button.secondary { background:var(--accent); color:#1f2937; }
+    /* Specific colors per requirement */
+    #send { background: var(--success); color:#052e16; }
+    #reset { background: var(--danger); color:#fff; }
+    button[disabled] { opacity:.6; cursor:not-allowed; }
+    footer { display:flex; justify-content:space-between; align-items:center; margin-top:4px; color:var(--muted); font-size:12px; }
+    code.badge { font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#0b1220; border:1px solid #1f2937; padding:2px 6px; border-radius:6px; color:#9ca3af; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Multi Agent</h1>
+  </header>
+
+  <main>
+    <div id="messages" aria-live="polite" aria-busy="false"></div>
+
+    <div>
+      <form id="chat-form">
+        <textarea id="input" placeholder="Ask about courses, schedules, or request a campus haiku…" autofocus></textarea>
+        <div class="button-group">
+          <button id="send" type="submit">Send</button>
+          <!-- Disabled by default; enabled only when session_id exists -->
+          <button id="reset" class="secondary" title="Clear chat & start new session" disabled>Clear Search</button>
+        </div>
+      </form>
+      <footer>
+        <div>Session: <code id="sid" class="badge">—</code></div>
+        <div>Tip: Shift+Enter = new line • Enter = send</div>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    const ENDPOINT = "/api/chat-sdk/";
+
+    // Do NOT create or restore session on load.
+    let sessionId = null;
+
+    const messages = document.getElementById("messages");
+    const sidBadge = document.getElementById("sid");
+    const form = document.getElementById("chat-form");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+    const resetBtn = document.getElementById("reset");
+
+    updateSidBadge(); // shows "—" and keeps Clear Search disabled
+
+    function addRow(text, type = "agent") {
+      const div = document.createElement("div");
+      div.className = `row ${type}`;
+      div.textContent = text;
+      messages.appendChild(div);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
+    function addAgentSegment(agentName, text) {
+      const div = document.createElement("div");
+      div.className = "row agent";
+      const header = document.createElement("div");
+      header.className = "agent-header";
+      const dot = document.createElement("span");
+      dot.className = "agent-dot";
+      const name = document.createElement("span");
+      name.className = "agent-name";
+      name.textContent = agentName || "Agent";
+      header.appendChild(dot);
+      header.appendChild(name);
+      const body = document.createElement("div");
+      body.textContent = text || "";
+      div.appendChild(header);
+      div.appendChild(body);
+      messages.appendChild(div);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    }
+    function addMeta(text) { if (text) addRow(text, "meta"); }
+    function addError(text) { addRow(text, "error"); }
+
+    function updateSidBadge() {
+      sidBadge.textContent = sessionId || "—";
+      resetBtn.disabled = !sessionId; // enable only when we have a session
+    }
+
+    function payload(msg) {
+      const body = { message: msg };
+      if (sessionId) body.session_id = sessionId;
+      return body;
+    }
+
+    function setSending(isSending) {
+      sendBtn.disabled = isSending;
+      sendBtn.textContent = isSending ? "Waiting for response..." : "Send";
+      resetBtn.disabled = isSending || !sessionId;
+    }
+
+    async function sendMessage(msg) {
+      addRow(msg, "user");
+      input.value = "";
+      setSending(true);
+
+      try {
+        const res = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload(msg)),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`HTTP ${res.status}: ${txt}`);
+        }
+        const data = await res.json();
+
+        // Create/attach session ONLY after first successful message
+        if (data.session_id && data.session_id !== sessionId) {
+          sessionId = data.session_id;
+          updateSidBadge(); // enables Clear Search
+        }
+
+        // Show each agent's name and message (meets "responding agent’s name + message" requirement).
+        if (Array.isArray(data.segments) && data.segments.length > 0) {
+          for (const seg of data.segments) {
+            addAgentSegment(seg.agent, seg.text);
+          }
+        } else if (data.response) {
+          // Fallback: show combined response if segments absent
+          addAgentSegment(data.agent, data.response);
+        } else {
+          addError("No response text returned.");
+        }
+      } catch (err) {
+        addError(err.message || String(err));
+      } finally {
+        setSending(false);
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const msg = (input.value || "").trim();
+      if (!msg || sendBtn.disabled) return;
+      sendMessage(msg);
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    resetBtn.addEventListener("click", () => {
+      if (resetBtn.disabled) return;
+      sessionId = null;
+      updateSidBadge();
+      messages.innerHTML = "";
+      addMeta("Session cleared. You can start fresh now.\nTry: “What courses should I take for data science next term?” or “Write a haiku about campus libraries.”");
+    });
+
+    addMeta('Welcome! Try: “What courses should I take for data science next term?” or “Write a haiku about campus libraries.”');
+  </script>
+</body>
+</html>

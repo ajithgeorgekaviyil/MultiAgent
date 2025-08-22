@@ -1,0 +1,9 @@
+# Core framework
+Django==5.0.6
+
+# Environment configuration
+python-dotenv==1.0.1   # Load environment variables (OPENAI_API_KEY)
+
+# OpenAI SDKs
+openai==1.99.9         # Official OpenAI Responses API client
+openai-agents==0.2.8   # OpenAI Agents SDK for multi-agent orchestration

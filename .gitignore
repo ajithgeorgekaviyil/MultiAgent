@@ -1,0 +1,28 @@
+# Python bytecode & caches
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Env vars
+.env
+.env.*
+
+# SQLite DBs (local/dev)
+db.sqlite3
+agents_sessions.sqlite3
+
+# Logs
+*.log
+
+# PyCharm / IntelliJ
+.idea/
+*.iml
+
+# Editors / OS
+.vscode/
+.DS_Store
+Thumbs.db
